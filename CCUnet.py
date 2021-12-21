@@ -25,17 +25,17 @@ train_picture_path = './datasets/ColorChecker_Recommended/'
 # the file path to save images during training
 train_save_path = model_name + '_' + train_fold + '_train/'
 if not os.path.exists(train_save_path):
-	os.makedirs(train_save_path)
+    os.makedirs(train_save_path)
 
 # the file path to save model during training
 model_save_path = model_name + '_' + train_fold + '_model/'
 if not os.path.exists(model_save_path):
-	os.makedirs(model_save_path)
+    os.makedirs(model_save_path)
 
 # the file path to save images during testing
 test_save_path = model_name + '_' + train_fold + '_test/'
 if not os.path.exists(test_save_path):
-	os.makedirs(test_save_path)
+    os.makedirs(test_save_path)
 
 # folds information recommended by Gehler, who is the author of the ColorChecher dataset
 # It is evenly divided according to the distribution of the illuminant information
@@ -87,7 +87,7 @@ def l1_loss(src, dst):
     return tf.reduce_mean(tf.abs(src - dst))
 
 # each training step
-def train_step(batch_picture,batch_label,ill_gt,counter):
+def train_step(batch_picture, batch_label, ill_gt, counter):
     with tf.GradientTape() as gen_tape:  # get gradients
         gen_label = gen_model(batch_picture)  # get generated label
         gen_label_wb =  (gen_label[0,:,:,1:4] + 1.0)/2.0  # the generated label (corrected by the network)
@@ -129,57 +129,57 @@ def get_mask_name(picture_name):
 f=open(model_name + '_' + train_fold + '_records.txt',"w+")
 
 # preprocessing in each traing step
-def preprocess(step):
-	flag = train_set[step] - 1
-	x,y,m,n = coordinates[flag]  # get coordinates
-	img_path = train_picture_list[flag]  # the file path of the current training picture
-	picture_name, _ = os.path.splitext(os.path.basename(img_path))  # picture name
-	picture =  cv2.imread(img_path)  # read picture
-	illum = groundtruth['REC_groundtruth'][flag]  # load the illuminant groundtruth of the current training picture
-	illum /= illum.sum()  # normalized
+def preprocess(step, train_set):
+    flag = train_set[step] - 1
+    x,y,m,n = coordinates[flag]  # get coordinates
+    img_path = train_picture_list[flag]  # the file path of the current training picture
+    picture_name, _ = os.path.splitext(os.path.basename(img_path))  # picture name
+    picture =  cv2.imread(img_path)  # read picture
+    illum = groundtruth['REC_groundtruth'][flag]  # load the illuminant groundtruth of the current training picture
+    illum /= illum.sum()  # normalized
 
-	# avoid colorchecker area and randomly crop out 480*480 image patches
-	height = picture.shape[0]
-	width = picture.shape[1]
-	colorchecker_x = [i for i in range(x,m+1)]
-	colorchecker_y = [i for i in range(y,n+1)]
-	while True:
-	    x1 = random.randint(0, height-480)
-	    crop_x = [i for i in range(x1, x1+480)]
-	    y1 = random.randint(0, width-480)
-	    crop_y = [i for i in range(y1, y1+480)]
-	    if set(crop_x)&set(colorchecker_x)==set() or set(crop_y)&set(colorchecker_y)==set():
-	        break
-	cropPic = picture[(x1):(x1 + 480), (y1):(y1 + 480)]
+    # avoid colorchecker area and randomly crop out 480*480 image patches
+    height = picture.shape[0]
+    width = picture.shape[1]
+    colorchecker_x = [i for i in range(x,m+1)]
+    colorchecker_y = [i for i in range(y,n+1)]
+    while True:
+        x1 = random.randint(0, height-480)
+        crop_x = [i for i in range(x1, x1+480)]
+        y1 = random.randint(0, width-480)
+        crop_y = [i for i in range(y1, y1+480)]
+        if set(crop_x)&set(colorchecker_x)==set() or set(crop_y)&set(colorchecker_y)==set():
+            break
+    cropPic = picture[(x1):(x1 + 480), (y1):(y1 + 480)]
 
-	picture = cv2.cvtColor(cropPic, cv2.COLOR_BGR2RGB).astype(np.float64)  # BGR -> RGB
-	picture = picture/255.0  # normalized (adjust the pixel value to 0~1)
-	picture_wb = np.clip(picture/illum, 0, 1)  # get the corresponding groundtruth
-	input_img = np.clip(picture*2 - 1, -1, 1)  # standardization
-	input_label = np.clip(picture_wb*2 - 1, -1, 1) 
+    picture = cv2.cvtColor(cropPic, cv2.COLOR_BGR2RGB).astype(np.float64)  # BGR -> RGB
+    picture = picture/255.0  # normalized (adjust the pixel value to 0~1)
+    picture_wb = np.clip(picture/illum, 0, 1)  # get the corresponding patch groundtruth
+    input_img = np.clip(picture*2 - 1, -1, 1)  # standardization
+    input_label = np.clip(picture_wb*2 - 1, -1, 1)  # standardization
 
     # batched
-	batch_picture = np.expand_dims(np.array(input_img).astype(np.float32), axis = 0)
-	batch_label = np.expand_dims(np.array(input_label).astype(np.float32), axis = 0)
+    batch_picture = np.expand_dims(np.array(input_img).astype(np.float32), axis = 0)
+    batch_label = np.expand_dims(np.array(input_label).astype(np.float32), axis = 0)
 
-	# randomly flip and rotate
-	if np.random.randint(2, size=1)[0] == 1:  # random flip
-	    batch_picture = np.flip(batch_picture, axis=1)
-	    batch_label = np.flip(batch_label, axis=1)
-	if np.random.randint(2, size=1)[0] == 1:
-	    batch_picture = np.flip(batch_picture, axis=2)
-	    batch_label = np.flip(batch_label, axis=2)
-	if np.random.randint(2, size=1)[0] == 1:  # random transpose
-	    batch_picture = np.transpose(batch_picture, (0, 2, 1, 3))
-	    batch_label = np.transpose(batch_label, (0, 2, 1, 3))
+    # randomly flip and rotate
+    if np.random.randint(2, size=1)[0] == 1:  # random flip
+        batch_picture = np.flip(batch_picture, axis=1)
+        batch_label = np.flip(batch_label, axis=1)
+    if np.random.randint(2, size=1)[0] == 1:
+        batch_picture = np.flip(batch_picture, axis=2)
+        batch_label = np.flip(batch_label, axis=2)
+    if np.random.randint(2, size=1)[0] == 1:  # random transpose
+        batch_picture = np.transpose(batch_picture, (0, 2, 1, 3))
+        batch_label = np.transpose(batch_label, (0, 2, 1, 3))
 
-	return batch_picture, batch_label, illum, picture_name
+    return batch_picture, batch_label, illum, picture_name
 
 # save image results
 def save_image(gen_label, batch_picture, batch_label, weight, save_path, epoch, counter, picture_name):
     out_img = (gen_label) * 255
     out_img = np.clip(out_img.numpy(),0,255).astype(np.uint8)
-    #out_img = cv2.resize(out_img, (height, width))
+    #out_img = cv2.resize(out_img, (height, width))  # resize to the original size, which needs to pass in the width and height parameters.
     ori_img = np.clip(((batch_picture[0] + 1.0)/2.0 * 255),0,255).astype(np.uint8)
     lab_img = np.clip(((batch_label[0] + 1.0)/2.0 * 255),0,255).astype(np.uint8)
     weight_img = cv2.cvtColor((weight[0] * 255).numpy(),cv2.COLOR_GRAY2RGB)
@@ -218,9 +218,9 @@ def train():
         train_errors = []
         # each picture in each training step
         for step in range(len(train_set)):
-        	counter += 1
-        	batch_picture, batch_label, illum, picture_name = preprocess(step) # get the traing batch
-            gen_loss,gen_label,dis_loss,ill_loss,weight = train_step(batch_picture,batch_label,illum,counter)  # feed into the network for training
+            counter += 1
+            batch_picture, batch_label, illum, picture_name = preprocess(step, train_set) # get the traing batch
+            gen_loss,gen_label,ill_loss,weight = train_step(batch_picture,batch_label,illum,counter)  # feed into the network for training
             
             # record the angle error
             ang = 180*math.acos(ill_loss.numpy())/math.pi
@@ -228,12 +228,12 @@ def train():
 
             # save the training image results per 1000 steps
             if counter % 1000 == 0:
-            	save_image(gen_label, batch_picture, batch_label, weight, train_save_path, epoch, counter, picture_name)
+                save_image(gen_label, batch_picture, batch_label, weight, train_save_path, epoch, counter, picture_name)
             
             # save the training information in the log
             if step % 100 == 0:
-                print('epoch {:d} step {:d} \t gen_loss = {:.3f}, dis_loss = {:.3f}, ill_loss = {:.3f}, ang = {:.3f}'.format(epoch, step, gen_loss, dis_loss, ill_loss, ang),file=f,flush=True)
-            print('epoch {:d} step {:d} \t gen_loss = {:.3f}, dis_loss = {:.3f}, ill_loss = {:.3f}, ang = {:.3f}'.format(epoch, step, gen_loss, dis_loss, ill_loss, ang),file=sys.stdout)
+                print('epoch {:d} step {:d} \t gen_loss = {:.3f}, ill_loss = {:.3f}, ang = {:.3f}'.format(epoch, step, gen_loss, ill_loss, ang),file=f,flush=True)
+            print('epoch {:d} step {:d} \t gen_loss = {:.3f}, ill_loss = {:.3f}, ang = {:.3f}'.format(epoch, step, gen_loss, ill_loss, ang),file=sys.stdout)
         print('train mean = {:.3f}, med = {:.3f}, tri={:.3f}, best25 = {:.3f}, worst25 = {:.3f}, q95 = {:.3f}, max = {:.3f}'.format(np.mean(train_errors), np.median(train_errors), (np.percentile(train_errors,25) + 2*np.percentile(train_errors,50) + np.percentile(train_errors,75))/4, np.mean(np.sort(train_errors)[0:int(0.25*len(train_errors))]), np.mean(np.sort(train_errors)[len(train_errors)-int(0.25*len(train_errors)):len(train_errors)]), np.percentile(train_errors,95), np.max(train_errors)),file=f,flush=True)
         print('train mean = {:.3f}, med = {:.3f}, tri={:.3f}, best25 = {:.3f}, worst25 = {:.3f}, q95 = {:.3f}, max = {:.3f}'.format(np.mean(train_errors), np.median(train_errors), (np.percentile(train_errors,25) + 2*np.percentile(train_errors,50) + np.percentile(train_errors,75))/4, np.mean(np.sort(train_errors)[0:int(0.25*len(train_errors))]), np.mean(np.sort(train_errors)[len(train_errors)-int(0.25*len(train_errors)):len(train_errors)]), np.percentile(train_errors,95), np.max(train_errors)),file=sys.stdout)
 
@@ -261,6 +261,7 @@ def evaluate(fold,epoch):
         input_img = np.clip(picture*2 - 1, -1, 1)
         input_label = np.clip(picture_wb*2 - 1, -1, 1)
         batch_picture = np.expand_dims(np.array(input_img).astype(np.float32), axis = 0)
+        batch_label = np.expand_dims(np.array(input_label).astype(np.float32), axis = 0)
         gen_label = gen_model(batch_picture)
         gen_label_wb =  (gen_label[0,:,:,1:4] + 1.0)/2.0
         ori_picture = (batch_picture + 1.0)/2.0
@@ -279,7 +280,7 @@ def evaluate(fold,epoch):
 
         # save the testing image results every 10 rounds and 100 steps
         if epoch%10 == 0 and step%100 == 0:
-        	save_image(gen_label_wb, input_img, input_label, weight, test_save_path, epoch, step, picture_name)
+            save_image(gen_label_wb, batch_picture, batch_label, weight, test_save_path, epoch, step, picture_name)
 
     print('test mean = {:.3f}, med = {:.3f}, tri={:.3f}, best25 = {:.3f}, worst25 = {:.3f}, q95 = {:.3f}, max = {:.3f}'.format(np.mean(test_errors), np.median(test_errors), (np.percentile(test_errors,25) + 2*np.percentile(test_errors,50) + np.percentile(test_errors,75))/4, np.mean(np.sort(test_errors)[0:int(0.25*len(test_errors))]), np.mean(np.sort(test_errors)[len(test_errors)-int(0.25*len(test_errors)):len(test_errors)]), np.percentile(test_errors,95), np.max(test_errors)),file=f,flush=True)
     print('test mean = {:.3f}, med = {:.3f}, tri={:.3f}, best25 = {:.3f}, worst25 = {:.3f}, q95 = {:.3f}, max = {:.3f}'.format(np.mean(test_errors), np.median(test_errors), (np.percentile(test_errors,25) + 2*np.percentile(test_errors,50) + np.percentile(test_errors,75))/4, np.mean(np.sort(test_errors)[0:int(0.25*len(test_errors))]), np.mean(np.sort(test_errors)[len(test_errors)-int(0.25*len(test_errors)):len(test_errors)]), np.percentile(test_errors,95), np.max(test_errors)),file=sys.stdout)
